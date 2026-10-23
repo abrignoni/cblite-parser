@@ -34,7 +34,7 @@ __all__ = [
     'CBLiteError', 'FleeceError', 'Store', 'Document', 'Revision', 'BlobRef',
     'decode_fleece', 'decode_rev_tree', 'format_revid', 'iter_blob_refs',
 ]
-__version__ = '1.0.0'
+__version__ = '1.1.0'
 
 
 class CBLiteError(Exception):

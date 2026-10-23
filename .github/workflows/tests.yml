@@ -36,6 +36,11 @@ jobs:
             echo "::error::a test was skipped; every test must run on every version"
             exit 1
           fi
+          # a ResourceWarning raised during finalisation is printed, not raised, so look for it
+          if grep -q "ResourceWarning" test-output.txt; then
+            echo "::error::a file or connection was left open"
+            exit 1
+          fi
 
       - name: Install the package and run the console script
         run: |
