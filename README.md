@@ -48,6 +48,7 @@ python -m cblite_parser info  path/to/app.cblite2
 python -m cblite_parser dump  path/to/app.cblite2 [--collection scope.name] [--revisions] [--no-tombstones]
 python -m cblite_parser blobs path/to/app.cblite2
 python -m cblite_parser fleece some.fleece [--shared-keys-from path/to/app.cblite2]
+python -m cblite_parser export path/to/app.cblite2 new-folder
 ```
 
 `<store>` can be the `.cblite2` directory or its `db.sqlite3`. `pip install .` adds a
@@ -61,6 +62,30 @@ python -m cblite_parser fleece some.fleece [--shared-keys-from path/to/app.cblit
   strict JSON.
 - `blobs` prints one tab-separated line per blob reference, then the orphan files.
 - `fleece` decodes a raw Fleece file, for a blob carved or copied out of somewhere else.
+- `export` writes a new folder for someone who would rather not use a command line. See below.
+
+### Export
+
+`export` refuses a folder that already holds files, then writes:
+
+| file | holds |
+| --- | --- |
+| `index.html` | one page that opens in any browser with no network: the source files and their SHA-256, the database's own records, then each collection as a table. A row expands to the full body and the revision tree, older bodies included, and image blobs show in place. The filter box searches the full bodies, not only what the row shows. |
+| `documents.csv` | one row per document, the body as compact JSON |
+| `revisions.csv` | one row per revision; only older revisions carry a body, since the current one is in `documents.csv` |
+| `blobs.csv` | one row per blob reference, then each orphan blob file |
+| `blobs/` | a copy of each blob file whose first bytes are a JPEG, PNG, GIF or WebP, named by its SHA-1 |
+| `export_info.json` | the tool version, the time, the counts, and the size and SHA-256 of every source file read |
+
+Every value on the page comes from the database, so the page escapes all of it, renders
+expanded rows with `textContent`, and carries a Content-Security-Policy that blocks any
+request except its own images. The CSV values are written as decoded; a spreadsheet may
+treat a value that starts with `=`, `+`, `-` or `@` as a formula, so open them as text when
+that matters.
+
+Size follows the data. A store of 7,172 documents holding 35 MB of document JSON exported in
+about five seconds to a 51 MB page that a browser opened in about half a second; a 30-document
+store gives a 76 KB page.
 
 From Python:
 
@@ -188,6 +213,10 @@ second decoder produced (the one in iLEAPP's KeepSafe artifact), except 197 docu
 of the shipped copy that the second decoder refused at a legacy pointer. Those 197 keep
 Fleece's own invariants (sorted keys, valid UTF-8) and carry the same `name` as their newer
 revision in the device's copy (196 the same `id`).
+
+`export` was run on two of these stores and the pages checked in a browser: rows expand,
+the revision tree and kept older bodies render, and the filter finds text that is only in
+the full bodies.
 
 Present in the code and covered by hand-built tests, but not seen in real data yet:
 named collections, tombstone rows, blob references and blob files, expiration values,

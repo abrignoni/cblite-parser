@@ -13,36 +13,23 @@ temporary copy, never in place.
               file's SHA-1 matches the digest. Files no document names follow, marked orphan.
 ``fleece``    decode a raw Fleece file; ``--shared-keys-from`` maps integer keys through a
               database's SharedKeys.
+``export``    write a new folder holding a self-contained HTML page, CSV files, a copy of
+              each image blob and an export_info.json with the SHA-256 of every source file.
 
 Binary values print as ``{"$base64": ...}`` and non-finite floats as ``{"$float": "nan"}`` so
 every line stays strict JSON.
 """
 import argparse
-import base64
 import json
-import math
 import os
 import sys
 
 from . import CBLiteError, FleeceError, Store, VERSIONING, decode_fleece
-
-
-def _jsonable(value):
-    if isinstance(value, bytes):
-        return {'$base64': base64.b64encode(value).decode('ascii')}
-    if isinstance(value, float) and not math.isfinite(value):
-        return {'$float': repr(value)}
-    if isinstance(value, dict):
-        return {str(k): _jsonable(v) for k, v in value.items()}
-    if isinstance(value, list):
-        return [_jsonable(v) for v in value]
-    if value is not None and not isinstance(value, (str, int, float, bool)):
-        return repr(value)
-    return value
+from .export import export, jsonable
 
 
 def _line(obj, out):
-    print(json.dumps(_jsonable(obj), ensure_ascii=False, allow_nan=False), file=out)
+    print(json.dumps(jsonable(obj), ensure_ascii=False, allow_nan=False), file=out)
 
 
 def info(store, out=sys.stdout):
@@ -64,7 +51,7 @@ def info(store, out=sys.stdout):
             else:
                 live += 1
         data['collections'][name] = {'documents': live, 'tombstones': tombstones}
-    print(json.dumps(_jsonable(data), indent=2, ensure_ascii=False, allow_nan=False), file=out)
+    print(json.dumps(jsonable(data), indent=2, ensure_ascii=False, allow_nan=False), file=out)
 
 
 def dump(store, collection=None, revisions=False, no_tombstones=False, out=sys.stdout):
@@ -124,6 +111,9 @@ def main(argv=None):
                              help='add the revision tree: earlier revision IDs and any retained bodies')
             sub.add_argument('--no-tombstones', action='store_true',
                              help='leave out the rows of the kv_del_ tombstone tables')
+    ex = commands.add_parser('export', help='write an HTML page and CSV files into a new folder')
+    ex.add_argument('store', help='the .cblite2 directory or its db.sqlite3')
+    ex.add_argument('out_dir', help='a folder that does not exist yet, or an empty one')
     fl = commands.add_parser('fleece', help='decode a raw Fleece file')
     fl.add_argument('file')
     fl.add_argument('--shared-keys-from', metavar='STORE',
@@ -131,7 +121,12 @@ def main(argv=None):
     args = parser.parse_args(argv)
 
     try:
-        if args.command == 'fleece':
+        if args.command == 'export':
+            result = export(args.store, args.out_dir)
+            documents = sum(c['documents'] + c['tombstones'] for c in result['collections'].values())
+            print(f"wrote {os.path.join(args.out_dir, 'index.html')} ({documents} documents, "
+                  f"{result['blob_references']} blob references)", file=sys.stderr)
+        elif args.command == 'fleece':
             shared = None
             if args.shared_keys_from:
                 with Store(args.shared_keys_from) as store:
@@ -147,7 +142,7 @@ def main(argv=None):
                 else:
                     blobs(store)
         sys.stdout.flush()
-    except (CBLiteError, FleeceError) as exc:
+    except (CBLiteError, FleeceError, FileExistsError) as exc:
         print(f'error: {exc}', file=sys.stderr)
         return 1
     except BrokenPipeError:
